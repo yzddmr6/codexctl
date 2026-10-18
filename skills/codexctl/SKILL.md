@@ -5,52 +5,44 @@ description: Start, inspect, steer, and stop Codex sessions through the local co
 
 # codexctl
 
-Use `codexctl` to operate sessions on the local Codex app-server daemon. Each command returns one JSON object; command failures return an `error` and exit 1. `watch` collects live events and returns them in that object rather than printing a continuous stream.
+Operate local Codex app-server sessions with `codexctl`. Commands return one JSON object; failures return `error` and exit 1. Consult subcommand `--help` for options and `codexctl models` for model IDs and supported efforts.
 
-## Prepare the task
+## Prepare and start
 
-- Check `codexctl --help` and the relevant subcommand's `--help` when options are uncertain. The CLI requires Python 3.9+ and a running Codex app-server daemon. If the daemon is unavailable, report the connection error; `codex app-server daemon start` starts it when needed for the requested work. `CODEXCTL_SOCK` overrides the default socket.
-- Preserve the user's model, effort, tier, cwd, sandbox, and configuration choices. Use `codexctl models` to resolve model IDs and supported efforts instead of hardcoding a preferred model. Omit unspecified model, effort, and tier flags to use defaults.
-- Set `--cwd` to the intended repository. Put the user's constraints at the top of the delegated prompt, including edit boundaries and restrictions on commits, pushes, PRs, publishing, and remote actions. Delegation does not grant additional authorization.
-- `start` and `review` default to full access: sandbox `danger-full-access`, approvals `never`. Override these with `--sandbox`, `--ask-for-approval`, and `--approvals-reviewer` only within the authorized scope. Choose a sandbox appropriate to the authorized work: `read-only` for inspection, `workspace-write` for repository edits or tests. Never widen an explicitly requested sandbox to work around a failure.
-- Only steer, queue work on, stop, or archive a thread the user identified or that you started for this task. Use `list` to resolve an ambiguous target before changing it.
+- Preserve the user's model, effort, tier, cwd, sandbox, and configuration choices. Omit unspecified flags to use CLI defaults. `start` and `review` default to `danger-full-access` with approvals `never`; never widen an explicitly requested sandbox to work around a failure.
+- Set `--cwd` to the intended repository. Put the user's constraints verbatim at the top of the prompt. Delegation grants no additional authorization for edits, commits, pushes, or remote actions.
+- Only modify threads the user identified or that you started for this task. Resolve ambiguous targets with `list`.
 
-## Start and collect results
-
-For a substantial prompt, use stdin with a quoted heredoc so shell substitutions cannot alter it:
+Use a quoted heredoc for substantial prompts:
 
 ```sh
-codexctl start - --cwd /path/to/repo --sandbox workspace-write --name scoped-fix <<'PROMPT'
+codexctl start - --cwd /path/to/repo --name scoped-fix <<'PROMPT'
 Constraints: Only edit the requested files. Do not commit, push, or modify remote state.
 Task: Implement the requested fix and run the relevant checks. Report changed files and validation results.
 PROMPT
 ```
 
-Save the returned `threadId`. `start` returns immediately; add `--wait SECONDS` to wait and receive a compact result instead. Use the host's background execution facility for long waits so the supervising conversation remains responsive.
+Save the returned `threadId`. `start` returns immediately; `--wait SECONDS` waits for a compact result. Use background execution for long waits to keep the supervising conversation responsive.
 
-```sh
-codexctl wait THREAD_ID --seconds 60
-codexctl result THREAD_ID
-```
-
-`wait` returns the last turn's result immediately if no turn is active. Its compact result includes `finished`, `turnStatus`, final message `text`, command count `commands`, `failedCount`, the last five `failedCommands` with clipped output, and `filesChanged`.
-
-If `finished` is false after `start --wait` or `wait`, the turn keeps running. Wait again on that thread; do not start a duplicate task. A finished turn can have failed or been interrupted, so inspect `turnStatus` and errors before claiming completion. Report the thread ID, actual outcome, relevant validation, and any remaining work.
-
-## Inspect and guide a session
+## Supervise and collect results
 
 | Intent | Command | Behavior |
 | --- | --- | --- |
-| Locate sessions | `codexctl list --limit 10` | Returns thread IDs, names, cwd, and status. |
-| Read saved progress | `codexctl status THREAD_ID` | Persisted history may omit in-progress items. |
-| See live progress | `codexctl watch THREAD_ID --seconds 30` | Collects events until completion or timeout; use for mid-course attention. |
-| Read the latest reply | `codexctl result THREAD_ID` | Returns the latest agent message; this alone does not prove the turn ended. |
+| Locate sessions | `codexctl list --limit 10` | Returns IDs, names, cwd, and status. |
+| Read saved progress | `codexctl status THREAD_ID` | May omit in-progress items. |
+| Wait for completion | `codexctl wait THREAD_ID --seconds 60` | Returns the last result immediately if idle. |
+| See live progress | `codexctl watch THREAD_ID --seconds 30` | Collects events into one response, not a continuous stream. |
+| Read latest reply | `codexctl result THREAD_ID` | Does not prove the turn ended. |
 | Guide active work | `codexctl steer THREAD_ID "Focus on the failing check"` | Requires an active turn. |
-| Start a follow-up | `codexctl queue THREAD_ID "Run the remaining checks" --wait 60` | Waits for the active turn to end, then starts a new one; it does not wait for the new turn to finish. |
+| Start a follow-up | `codexctl queue THREAD_ID "Run the remaining checks" --wait 60` | Waits for the previous turn, then starts the next; does not wait for the new turn to finish. |
 
-Prefer `wait` for completion instead of repeated progress polling. A `queue` timeout means the existing turn was still active; inspect that thread before retrying. If a command fails ambiguously after submission, inspect the known thread or list sessions before resubmitting work.
+Use `wait` for completion; do not poll with `watch`. Reserve `watch` for mid-course attention or requested live progress.
 
-`watch` can report a `serverRequest`: the daemon is waiting for a client response that `codexctl` cannot supply. Report the blocked request instead of assuming more waiting will resolve it.
+- If `finished` is false, ordinary turns keep running. Wait again on the same thread. Check `turnStatus` and errors before claiming success; finished turns can fail or be interrupted.
+- After a queue timeout or ambiguous submission failure, inspect the thread or list sessions before retrying to avoid duplicate work.
+- A `serverRequest` means the daemon needs a client response that `codexctl` cannot supply. Report the blockage; waiting will not resolve it.
+
+Report the thread ID, outcome, validation, and remaining work.
 
 ## Built-in review
 
@@ -58,13 +50,16 @@ Prefer `wait` for completion instead of repeated progress polling. A `queue` tim
 codexctl review --cwd /path/to/repo --base main --wait 3600
 ```
 
-The default target is uncommitted changes. Choose at most one of `--base BRANCH`, `--commit SHA`, or `--instructions TEXT`. Review accepts the same model, effort, tier, cwd, name, sandbox, and `-c KEY=VALUE` options as `start`.
+The default target is uncommitted changes. Choose at most one of `--base BRANCH`, `--commit SHA`, or `--instructions TEXT`. Review uses tier `default` (standard speed) unless explicitly overridden; `--tier priority` selects Fast mode.
 
-Review defaults to full access (`danger-full-access`, approvals `never`) and explicitly requests tier `default` (standard speed), overriding the configured service tier. Preserve explicit `--sandbox` and `--tier` choices; `--tier priority` selects Fast mode. Run long reviews through background execution and keep the command alive: unlike ordinary turns, a review is interrupted when its client disconnects, including when `--wait` expires. Do not describe a timed-out review as continuing in the background. A completed review returns its text in `review`.
+Keep the review client alive using background execution for long reviews. Unlike ordinary turns, reviews are interrupted when the client disconnects, including when `--wait` expires. A timed-out review is not continuing in the background. Completed review text is in `review`.
 
-## Stop and configuration behavior
+## Stop sessions
 
-- `codexctl stop THREAD_ID` interrupts the turn, but commands it started may keep running.
-- `codexctl stop THREAD_ID --kill-processes` archives and unarchives the thread to end its daemon-managed processes while keeping the thread usable. Use when stopping those processes is within the user's request; do not infer that detached or remote jobs have also ended.
-- `codexctl archive THREAD_ID` archives the thread and ends its daemon-managed processes. Treat it as a lifecycle change, not harmless history cleanup.
-- Repeated `-c KEY=VALUE` options support dotted keys; values are parsed as JSON, falling back to strings. `codexctl` stores overrides, the sandbox, the approval policy, and the reviewer in `~/.local/state/codexctl/threads.json`. It reapplies them when it reloads idle threads and pins the sandbox, approval policy, and reviewer on every turn it starts. `queue` preserves recorded permissions, including older threads; an untracked thread gets the full-access defaults. `queue --sandbox`, `--ask-for-approval`, and `--approvals-reviewer` update the corresponding saved settings; don't widen permissions beyond what the user authorized. `status` reports the pinned settings and `lastTurnPermissions`, which you can use to verify them. Other clients do not reapply that state; use a Codex profile or `config.toml` for settings that must persist across clients, only when changing those settings is in scope.
+- `stop THREAD_ID` interrupts the turn; its commands may keep running.
+- `stop THREAD_ID --kill-processes` ends daemon-managed processes and keeps the thread usable.
+- `archive THREAD_ID` archives the thread and ends daemon-managed processes; it is not harmless history cleanup.
+
+Only stop processes within the requested scope. Detached or remote jobs may survive.
+
+For connection failures, custom configuration, or permission persistence across turns and clients, read [configuration and troubleshooting](references/configuration.md).
