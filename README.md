@@ -1,6 +1,6 @@
 # codexctl
 
-`codexctl` is a small command-line client for the local Codex app-server daemon. It starts, monitors, steers, queues, and stops Codex sessions. It also ships a Claude Code subagent, `codex-runner`, so Claude Code can hand work to Codex models.
+`codexctl` is a small command-line client for the local Codex app-server daemon. It starts, monitors, steers, queues, and stops Codex sessions. It also ships an agent skill so Claude Code and Codex can hand work to Codex models.
 
 It talks to the daemon's own JSON-RPC protocol and has no dependencies beyond Python 3.9+. The protocol version comes from your installed Codex CLI, not from this repository, so new models, reasoning efforts, and speed tiers work without an update here.
 
@@ -18,18 +18,27 @@ cd codexctl
 ./install.sh
 ```
 
-The installer symlinks `codexctl` into `~/.local/bin` and `agents/codex-runner.md` into `~/.claude/agents`. Set `CODEXCTL_BIN_DIR` or `CLAUDE_AGENTS_DIR` to change those locations. Restart Claude Code to load the agent.
+The installer symlinks `codexctl` into `~/.local/bin`. Set `CODEXCTL_BIN_DIR` to change that location.
 
 ### Agent skill
 
-The bundled [codexctl skill](skills/codexctl/SKILL.md) teaches agents how to start and supervise sessions, run reviews, and preserve the caller's constraints. To make it available in Codex, link it from this checkout after installing the CLI:
+The bundled [codexctl skill](skills/codexctl/SKILL.md) teaches agents how to start and supervise sessions, run reviews, and preserve the caller's constraints. `install.sh` doesn't install it; link it into each agent that should use it. Run these commands from the repository root after installing the CLI.
+
+Claude Code:
+
+```sh
+mkdir -p ~/.claude/skills
+ln -s "$PWD/skills/codexctl" ~/.claude/skills/codexctl
+```
+
+Codex:
 
 ```sh
 mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
 ln -s "$PWD/skills/codexctl" "${CODEX_HOME:-$HOME/.codex}/skills/codexctl"
 ```
 
-Run these commands from the repository root, then restart Codex to discover the skill. Other skill-compatible agents can load the same `skills/codexctl` directory. `install.sh` installs the CLI and Claude Code subagent; the skill is installed separately.
+Restart the agent to discover the skill. Other skill-compatible agents can load the same `skills/codexctl` directory.
 
 ## Usage
 
@@ -57,7 +66,7 @@ codexctl review --base main --model gpt-6-sol --effort high   # built-in review;
 
 ### Cheap supervision from Claude Code
 
-Waiting doesn't need a model. Run `codexctl start ... --wait 7200` (or `codexctl wait <threadId>`) with Bash `run_in_background`, and Claude Code is notified when it exits. No tokens are spent while Codex works, and only the compact result comes back. Use the `codex-runner` subagent, or `watch` and `steer` directly, only when a run needs mid-course attention.
+Waiting doesn't need a model. Run `codexctl start ... --wait 7200` (or `codexctl wait <threadId>`) with Bash `run_in_background`, and Claude Code is notified when it exits. No tokens are spent while Codex works, and only the compact result comes back. Use `watch` and `steer` only when a run needs mid-course attention.
 
 `start` options:
 
