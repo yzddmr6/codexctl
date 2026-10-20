@@ -9,7 +9,7 @@ Operate local Codex app-server sessions with `codexctl`. Commands return one JSO
 
 ## Prepare and start
 
-- Preserve the user's model, effort, tier, cwd, sandbox, and configuration choices. Omit unspecified flags to use CLI defaults. `start` and `review` default to `danger-full-access` with approvals `never`; never widen an explicitly requested sandbox to work around a failure.
+- Pass only the model, effort, tier, sandbox, approval, and configuration flags the user requested. Omit every other flag so the CLI defaults apply, even when a different setting seems better for the task. `start` and `review` default to `danger-full-access` with approvals `never`; never widen an explicitly requested sandbox to work around a failure.
 - Set `--cwd` to the intended repository. Put the user's constraints verbatim at the top of the prompt. Delegation grants no additional authorization for edits, commits, pushes, or remote actions.
 - Only modify threads the user identified or that you started for this task. Resolve ambiguous targets with `list`.
 
@@ -51,6 +51,8 @@ codexctl review --cwd /path/to/repo --base main --wait 3600
 ```
 
 The default target is uncommitted changes. Choose at most one of `--base BRANCH`, `--commit SHA`, or `--instructions TEXT`. Review uses tier `default` (standard speed) unless explicitly overridden; `--tier priority` selects Fast mode.
+
+Review mode has its own built-in instructions; don't restate or override them. Prefer a built-in target and pass no text. Use `--instructions` only when no built-in target fits. In that case, write the minimal text that names the target, such as `Review the uncommitted changes, excluding path/to/unrelated.swift`, and add the user's specific requests verbatim if they made any. Don't add intent summaries, focus areas, methods, or output formats.
 
 Keep the review client alive using background execution for long reviews. Unlike ordinary turns, reviews are interrupted when the client disconnects, including when `--wait` expires. A timed-out review is not continuing in the background. Completed review text is in `review`.
 
