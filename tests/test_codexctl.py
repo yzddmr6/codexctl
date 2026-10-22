@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from contextlib import redirect_stdout
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -223,6 +224,22 @@ class PermissionPinningTest(unittest.TestCase):
         self.assertEqual(out["sandbox"], "workspace-write")
         tp = [r["params"] for r in d.requests if r.get("method") == "turn/start"][-1]
         self.assertEqual(tp["sandboxPolicy"], {"type": "workspaceWrite", "networkAccess": True})
+
+    def test_queue_reads_message_from_stdin(self):
+        d = self.daemon({"type": "dangerFullAccess"}, loaded=True)
+        with unittest.mock.patch("sys.stdin", io.StringIO("Slice 2 brief\n")):
+            FramingTest().run_cli(d, "queue", "t1", "-")
+        d.close()
+        tp = [r["params"] for r in d.requests if r.get("method") == "turn/start"][-1]
+        self.assertEqual(tp["input"], [{"type": "text", "text": "Slice 2 brief\n"}])
+
+    def test_blank_message_is_rejected_before_contacting_daemon(self):
+        d = self.daemon({"type": "dangerFullAccess"}, loaded=True)
+        with unittest.mock.patch("sys.stdin", io.StringIO("  \n")):
+            out = FramingTest().run_cli(d, "steer", "t1", "-")
+        d.close()
+        self.assertEqual(out["error"], "empty message on stdin")
+        self.assertEqual(d.requests, [])
 
     def test_untracked_thread_gets_full_access_defaults(self):
         d = self.daemon({"type": "dangerFullAccess"})

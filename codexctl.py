@@ -238,6 +238,14 @@ def text_input(text):
     return [{"type": "text", "text": text}]
 
 
+def message_text(arg):
+    """Resolve a prompt or message argument; `-` reads stdin. Rejects blank text before anything is sent."""
+    text = sys.stdin.read() if arg == "-" else arg
+    if not text.strip():
+        raise CodexError("empty message" + (" on stdin" if arg == "-" else ""))
+    return text
+
+
 def parse_value(v):
     try:
         return json.loads(v)
@@ -315,9 +323,9 @@ def cmd_review(a):
 
 
 def cmd_start(a):
+    prompt = message_text(a.prompt)
     c = Client()
     r, tid = new_thread(c, a)
-    prompt = sys.stdin.read() if a.prompt == "-" else a.prompt
     tp = {"threadId": tid, "input": text_input(prompt), **turn_overrides(a), **pinned_permissions(tid)}
     if a.summary:
         tp["summary"] = a.summary
@@ -473,15 +481,17 @@ def cmd_watch(a):
 
 
 def cmd_steer(a):
+    message = message_text(a.message)
     c = Client()
     active = active_turn_id(c, a.thread)
     if not active:
         raise CodexError("no active turn to steer; use `queue` to start a new turn")
-    c.call("turn/steer", {"threadId": a.thread, "expectedTurnId": active, "input": text_input(a.message)})
+    c.call("turn/steer", {"threadId": a.thread, "expectedTurnId": active, "input": text_input(message)})
     return {"steered": True, "turnId": active}
 
 
 def cmd_queue(a):
+    message = message_text(a.message)
     c = Client()
     saved = load_state().get(a.thread, {})
     sandbox = a.sandbox or saved.get("sandbox") or DEFAULT_SANDBOX
@@ -498,7 +508,7 @@ def cmd_queue(a):
             raise CodexError(f"a turn is still active after {a.wait}s; use `steer`, `stop`, or retry")
         time.sleep(5)
     pinned = pinned_permissions(a.thread)
-    tr = c.call("turn/start", {"threadId": a.thread, "input": text_input(a.message), **turn_overrides(a), **pinned})
+    tr = c.call("turn/start", {"threadId": a.thread, "input": text_input(message), **turn_overrides(a), **pinned})
     return {"queued": True, "turnId": tr["turn"]["id"], "sandbox": sandbox,
             "approvalPolicy": policy, "approvalsReviewer": reviewer}
 
@@ -617,11 +627,11 @@ def build_parser():
 
     s = add("steer", cmd_steer, "add guidance to the running turn")
     s.add_argument("thread")
-    s.add_argument("message")
+    s.add_argument("message", help="message text, or - to read it from stdin")
 
     s = add("queue", cmd_queue, "wait for the active turn to end, then start a new turn (blocks)")
     s.add_argument("thread")
-    s.add_argument("message")
+    s.add_argument("message", help="message text, or - to read it from stdin")
     s.add_argument("--wait", type=int, default=3600, help="max seconds to wait (default 3600)")
     s.add_argument("--sandbox", choices=SANDBOXES,
                    help="re-pin the thread's sandbox (default: recorded sandbox, else danger-full-access)")

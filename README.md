@@ -82,7 +82,7 @@ Waiting doesn't need a model. Run `codexctl start ... --wait 7200` (or `codexctl
 | `--name` | Thread name shown in Codex history |
 | `-c KEY=VALUE` | Codex config override; dotted keys work, and `VALUE` is parsed as JSON, falling back to a plain string |
 | `--wait SECONDS` | Block until the turn ends, up to SECONDS, and print the compact result |
-| `-` as prompt | Read the prompt from stdin |
+| `-` as prompt | Read the prompt from stdin (also works for the `steer` and `queue` message); blank text is rejected |
 
 Sessions run on the shared daemon, so they keep running after `codexctl` exits. They also appear in `codex agents` and in Codex history.
 

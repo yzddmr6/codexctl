@@ -13,7 +13,7 @@ Operate local Codex app-server sessions with `codexctl`. Commands return one JSO
 - Set `--cwd` to the intended repository. Put the user's constraints verbatim at the top of the prompt. Delegation grants no additional authorization for edits, commits, pushes, or remote actions.
 - Only modify threads the user identified or that you started for this task. Resolve ambiguous targets with `list`.
 
-Use a quoted heredoc for substantial prompts:
+Use a quoted heredoc for substantial prompts; `start`, `queue`, and `steer` read stdin when the prompt or message is `-`:
 
 ```sh
 codexctl start - --cwd /path/to/repo --name scoped-fix <<'PROMPT'
@@ -38,6 +38,7 @@ Save the returned `threadId`. `start` returns immediately; `--wait SECONDS` wait
 
 Use `wait` for completion; do not poll with `watch`. Reserve `watch` for mid-course attention or requested live progress.
 
+- Confirm a hand-off from the returned JSON (`turnId`, `queued`, or `steered`) before reporting that work has started.
 - If `finished` is false, ordinary turns keep running. Wait again on the same thread. Check `turnStatus` and errors before claiming success; finished turns can fail or be interrupted.
 - After a queue timeout or ambiguous submission failure, inspect the thread or list sessions before retrying to avoid duplicate work.
 - A `serverRequest` means the daemon needs a client response that `codexctl` cannot supply. Report the blockage; waiting will not resolve it.
