@@ -124,6 +124,14 @@ class FramingTest(unittest.TestCase):
         self.assertEqual(len(out["models"]), 80)
         self.assertEqual(out["models"][0]["serviceTiers"]["priority"], "x" * 900)
 
+    def test_usage_errors_are_json_with_exit_1(self):
+        for argv in (["nosuchcommand"], ["start", "--model", "x"], ["wait", "t", "--seconds", "soon"]):
+            buf = io.StringIO()
+            with redirect_stdout(buf), self.assertRaises(SystemExit) as cm:
+                codexctl.main(argv)
+            self.assertEqual(cm.exception.code, 1, argv)
+            self.assertIn("error", json.loads(buf.getvalue()))
+
     def test_rpc_error_becomes_json_error(self):
         def handler(msg):
             if msg["method"] == "thread/read":
